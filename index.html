@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AQUARIA</title>
+  <link href="https://fonts.googleapis.com/css2?family=Barrio&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --shallow:      #A3D3DF;
+      --shallow-lite: #BEE0E8;
+      --abyss:        #617886;
+      --coral:        #D9503E;
+      --axolotl:      #ECB4CD;
+      --paper:        #FFF9ED;
+      --squid:        #878787;
+      --ink:          #16242B;
+      --font-display: "Barrio", system-ui, sans-serif;
+      --font-mono:    "IBM Plex Mono", ui-monospace, monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--shallow);
+      color: var(--ink);
+      font-family: var(--font-mono);
+    }
+
+    #app {
+      position: fixed;
+      inset: 0;
+    }
+
+    /* Three.js canvas */
+    #app canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    /* CSS2D renderer overlay */
+    #css2d-layer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    /* UI overlay (menu, chat input) */
+    #ui-layer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    #ui-layer > * {
+      pointer-events: auto;
+    }
+
+    /* ── Entry screen ── */
+    #entry-screen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      background: linear-gradient(180deg, var(--shallow-lite) 0%, var(--shallow) 100%);
+    }
+
+    #wordmark {
+      font-family: var(--font-display);
+      font-size: clamp(48px, 10vw, 120px);
+      letter-spacing: .04em;
+      color: var(--ink);
+      line-height: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    #wordmark span {
+      display: inline-block;
+      transform: translateY(110%);
+    }
+
+    #wordmark .r-letter {
+      color: var(--coral);
+    }
+
+    #enter-btn {
+      margin-top: 48px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: .26em;
+      text-transform: uppercase;
+      color: var(--ink);
+      background: none;
+      border: 2px solid var(--ink);
+      padding: 14px 36px;
+      cursor: pointer;
+      opacity: 0;
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    #enter-btn:hover {
+      color: var(--coral);
+      border-color: var(--coral);
+    }
+
+    #eyebrow {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: .26em;
+      text-transform: uppercase;
+      color: var(--coral);
+      opacity: 0;
+      margin-bottom: 24px;
+    }
+
+    /* ── Scene wordmark (visible after dive) ── */
+    #scene-wordmark {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: var(--font-display);
+      font-size: clamp(52px, 9vw, 120px);
+      letter-spacing: .04em;
+      color: #ffffff;
+      pointer-events: none;
+      opacity: 0;
+      z-index: 5;
+      display: flex;
+      user-select: none;
+    }
+
+    #scene-wordmark .r-letter { color: var(--coral); }
+
+    /* ── Moon — doubles as menu button ── */
+    #moon {
+      position: fixed;
+      top: 32px;
+      right: 48px;
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 38% 34%, #fffdf6, var(--paper));
+      box-shadow: 0 0 46px 10px rgba(255,249,237,.55);
+      z-index: 50;
+      opacity: 0;
+      cursor: pointer;
+      transition: box-shadow 0.3s, transform 0.3s;
+    }
+
+    #moon:hover {
+      box-shadow: 0 0 64px 18px rgba(255,249,237,.75);
+      transform: scale(1.07);
+    }
+
+    /* ── Menu overlay ── */
+    #menu-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(97, 120, 134, 0.93);
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 0 7vw 0 0;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.4s;
+    }
+
+    #menu-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #menu-close {
+      position: absolute;
+      top: 36px;
+      left: 40px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: .26em;
+      text-transform: uppercase;
+      color: rgba(255,249,237,0.5);
+      background: none;
+      border: none;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+
+    #menu-close:hover { color: var(--coral); }
+
+    .menu-item {
+      font-family: var(--font-mono);
+      font-size: clamp(28px, 4vw, 56px);
+      color: var(--paper);
+      opacity: 0.62;
+      cursor: pointer;
+      background: none;
+      border: none;
+      text-align: right;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      line-height: 1.5;
+      padding: 4px 0;
+      transition: opacity 0.2s, color 0.2s, font-size 0.15s, letter-spacing 0.15s;
+      transform: translateX(30px);
+    }
+
+    .menu-item:hover {
+      font-family: var(--font-display);
+      font-size: clamp(48px, 7.5vw, 110px);
+      letter-spacing: .04em;
+      opacity: 1;
+      color: var(--paper);
+    }
+
+    /* ── Speech bubbles — SVG background ── */
+    .speech-bubble {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--ink);
+      line-height: 1.5;
+      position: relative;
+      opacity: 0;
+      transform: scale(0.88) translateY(6px);
+      pointer-events: none;
+      white-space: normal;
+      border: none;
+      background-color: transparent;
+      background-repeat: no-repeat;
+      background-size: 100% 100%;
+    }
+
+    /* bubble1 — Otto's wide blob (556×173 ratio) */
+    .speech-bubble.bubble1 {
+      background-image: url('/assets/bubble/bubble1.svg');
+      min-width: 210px;
+      max-width: 240px;
+      padding: 30px 52px 30px 48px;
+    }
+
+    /* bubble2 — Mochi's rounder blob (385×148 ratio) */
+    .speech-bubble.bubble2 {
+      background-image: url('/assets/bubble/bubble2.svg');
+      min-width: 180px;
+      max-width: 210px;
+      padding: 28px 46px 28px 42px;
+    }
+
+    .speech-bubble.visible {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+      transition: opacity 0.3s, transform 0.3s;
+    }
+
+    /* ── Chat input ── */
+    #chat-input-container {
+      position: fixed;
+      bottom: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 0;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+      z-index: 50;
+    }
+
+    #chat-input-container.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #chat-input {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      color: var(--ink);
+      background: var(--paper);
+      border: 2px solid var(--squid);
+      border-right: none;
+      padding: 12px 20px;
+      width: 320px;
+      outline: none;
+      border-radius: 24px 0 0 24px;
+      transition: border-color 0.2s;
+    }
+
+    #chat-input:focus {
+      border-color: var(--coral);
+    }
+
+    #chat-input::placeholder {
+      color: var(--squid);
+    }
+
+    #chat-submit {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--paper);
+      background: var(--squid);
+      border: 2px solid var(--squid);
+      padding: 12px 20px;
+      cursor: pointer;
+      border-radius: 0 4px 4px 0;
+      transition: background 0.2s, color 0.2s, border-color 0.2s;
+    }
+
+    #chat-submit:hover {
+      background: var(--coral);
+      border-color: var(--coral);
+    }
+
+    /* ── Loading indicator ── */
+    #loading {
+      position: fixed;
+      inset: 0;
+      background: var(--shallow);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 300;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: .26em;
+      text-transform: uppercase;
+      color: var(--squid);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div id="loading">loading</div>
+
+  <div id="app"></div>
+  <div id="css2d-layer"></div>
+  <div id="ui-layer">
+    <div id="moon"></div>
+
+    <!-- Scene wordmark — visible in underwater scene -->
+    <div id="scene-wordmark" aria-hidden="true">
+      A<span>Q</span>UA<span class="r-letter">R</span>IA
+    </div>
+
+    <!-- Entry screen (shown before Enter click) -->
+    <div id="entry-screen">
+      <div id="eyebrow">New Media Studio</div>
+      <div id="wordmark">
+        <span>A</span><span>Q</span><span>U</span><span>A</span><span class="r-letter">R</span><span>I</span><span>A</span>
+      </div>
+      <button id="enter-btn">Enter</button>
+    </div>
+
+    <!-- Menu overlay -->
+    <div id="menu-overlay">
+      <button id="menu-close">Close</button>
+      <button class="menu-item" data-section="about">About</button>
+      <button class="menu-item" data-section="santabeer">Santa Beer</button>
+      <button class="menu-item" data-section="cassette">Cassette Jury</button>
+      <button class="menu-item" data-section="more">More</button>
+    </div>
+
+    <!-- Chat input (shown on character hover) -->
+    <div id="chat-input-container">
+      <input id="chat-input" type="text" placeholder="say something..." autocomplete="off" />
+      <button id="chat-submit">Send</button>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

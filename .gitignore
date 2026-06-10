@@ -1,0 +1,8 @@
+.env
+.env.local
+node_modules/
+dist/
+.agents/skills/gsap-core/project (20).json
+.agents/
+.agents/
+assets/underwater.json
