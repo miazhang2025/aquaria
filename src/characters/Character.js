@@ -53,8 +53,10 @@ export class Character {
   loadGLTF(url, { rotationY = 0 } = {}) {
     return new Promise((resolve, reject) => {
       new GLTFLoader().load(url, (gltf) => {
-        // Clear all placeholder meshes
-        while (this.group.children.length) this.group.remove(this.group.children[0]);
+        // Clear placeholder meshes, but keep attached CSS2D objects (speech bubbles)
+        this.group.children.slice().forEach(child => {
+          if (!child.isCSS2DObject) this.group.remove(child);
+        });
 
         const model = gltf.scene;
         model.rotation.y = rotationY;

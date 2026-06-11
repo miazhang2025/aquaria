@@ -4,7 +4,7 @@ import { Character } from './Character.js';
 export class Axolotl extends Character {
   constructor(scene, options = {}) {
     super(scene, {
-      name: 'mochi',
+      name: 'axolotl',
       color: 0xECB4CD,
       position: new THREE.Vector3(1.6, 0, 0),
       ...options,

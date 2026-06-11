@@ -5,7 +5,7 @@ import { Character } from './Character.js';
 export class Octopus extends Character {
   constructor(scene, options = {}) {
     super(scene, {
-      name: 'otto',
+      name: 'octopus',
       color: 0xD9503E,
       position: new THREE.Vector3(-1.6, 0, 0),
       ...options,

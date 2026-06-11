@@ -110,6 +110,59 @@ Menu (dark overlay)
 
 ---
 
+## Dialogue System  ← source of truth, keep code in sync
+
+The conversation is **LLM-generated to some degree, with a guaranteed direction and function.**
+Otto + Mochi are written by Claude (`claude-haiku-4-5-20251001`) from persona files, but the
+*structure* (which links/contact info appear, how many lines) is fixed in code so the experience
+never depends on the model behaving. Everything degrades gracefully to hardcoded fallbacks when
+there is no API key or the call fails.
+
+Personas live in `data/octopus.md` / `data/axolotl.md`, imported verbatim via Vite `?raw` in
+`data/dialogues.js` and exported as `octopusPersona` / `axolotlPersona` — edit the markdown to retune
+voice, no code change needed. The two characters are identified everywhere by `name: 'octopus'` /
+`'axolotl'` (also the `speaker` value on every dialogue line and the LLM JSON contract).
+
+### Four modes
+
+| Mode | Trigger | Source | Guarantee |
+|---|---|---|---|
+| **Idle banter** | auto, on a loop while nothing else is happening | LLM exchanges queued ahead of time; hardcoded `idleDialogues` seed + offline fallback | always has something to say; coherent two-character exchanges |
+| **Talk to a creature** | user hovers Otto or Mochi → chat input → submit | LLM single reply in that character's voice | replies as the hovered character; pauses idle for the whole interaction |
+| **Menu section** | click a menu item | LLM banter + **fixed appended functional line(s)** | the right link / contact always appears, within the line budget |
+| **(fallback)** | no API key or LLM error | hardcoded `menuDialogues` / `idleDialogues` | full experience still works offline |
+
+### Menu sections — direction + function
+
+Each section generates a short LLM exchange from a **brief**, then **appends guaranteed lines** so the
+functional payload is never lost to the model:
+
+| Section | LLM brief (direction) | Generated lines | Guaranteed appended line(s) |
+|---|---|---|---|
+| **About** | introduce the studio: soft, glossy, slightly tired little worlds; small weird interactive / video / story things | ~6 | — |
+| **Santa Beer** | the project: Santa on weight-loss pills advertising beer, simultaneously; deadpan | 1 | `otto: "Watch it." → https://miazhang2025.github.io/santabeer/` |
+| **Cassette Jury** | the project: sound, tape and time — mostly tape | 1 | `mochi: "Go look." → https://cassettejury.farm/` |
+| **More** | more projects, slowly + carefully being made, in the wet → lead into contact | 2 | `otto: "If you want to talk:" → mailto:hello@aquaria.studio` |
+
+So Santa Beer / Cassette Jury stay within ~2 dialogue lines and **always end on the link**; About
+introduces the studio; More **always ends on contact info**.
+
+### Rules for generation
+- Output is strict JSON: `[{ "speaker": "otto" | "mochi", "text": "..." }]`, no prose/markdown.
+- Voice: deadpan, brief, lowercase feelings, no exclamation marks, no emoji (see brand Voice & Tone).
+- Alternate speakers; keep each line short (~one breath).
+- A generation is tagged with a conversation token; if the user hovers / a newer interaction starts
+  mid-request, the stale result is dropped (never overrides newer state).
+
+### Implementation map
+- `ConversationSystem.startIdle / pause / resume` — idle loop + timer bookkeeping (all timers tracked so pause is atomic).
+- `ConversationSystem.triggerSection(section)` — pause → generate from brief → append guaranteed lines → play → resume idle.
+- `ConversationSystem.sendUserMessage(text, character)` — single in-character LLM reply on hover-chat.
+- `ConversationSystem._generateExchange(brief, count)` — the LLM → JSON exchange helper (returns `null` on failure → caller falls back).
+- `data/dialogues.js` — `sectionConfig` (brief / count / append / fallback per section), `idleBrief`, `idleDialogues`, `menuDialogues`, personas.
+
+---
+
 ## Visual Effects
 
 | Effect | Approach |
@@ -128,15 +181,14 @@ Menu (dark overlay)
 ## UI Components
 
 ### Speech Bubble
-```css
-background: #FFF9ED;
-border: 2px solid #16242B;
-padding: 14px 20px;
-font: 14px "IBM Plex Mono";
-border-radius: 44px 48px 40px 50px / 50px 40px 48px 42px;
-/* tail: 16px square, border-right + border-bottom 2px ink, rotate(45deg), bottom-left */
-```
-Dim variant (abyss bg): `background: #d4d4d2; border-color: #6a6a6a; color: #222`
+SVG-blob bubbles (`bubble1` = octopus/wide, `bubble2` = axolotl/round), font IBM Plex Mono, ink text.
+**Scales with line length:** `SpeechBubble._applyScale()` sets `--bubble-scale`
+(`1 → 1.5` as length grows ~30→140 chars); CSS keys font-size + min/max-width off it and uses `em`
+padding so the blob keeps proportions. The CSS2D renderer owns the element `transform`, so scaling is
+done via font-size/width, **not** a transform.
+
+Legacy spec (paper variant): `background:#FFF9ED; border:2px solid #16242B; border-radius: 44px 48px
+40px 50px / 50px 40px 48px 42px;` · Dim variant (abyss bg): `background:#d4d4d2; border-color:#6a6a6a; color:#222`.
 
 ### Navigation / Menu
 - IBM Plex Mono, uppercase, `letter-spacing: .26em`
@@ -205,6 +257,50 @@ Camera follows a **CatmullRom spline** through 4 depth zones. On scroll-stop, ca
 - `CameraController.js` owns the spline + lerp; exposes `setScrollProgress(t)`
 - Scroll system is separate from the Enter dive animation — dive runs once on click, then scroll takes over
 - `prefers-reduced-motion`: disable spline travel, camera locks at Conversation Depth
+
+### Snap-synced Narrative Scroll (`systems/NarrativeScroll.js`)
+
+After the dive, the camera **and** the center text are driven by one controller as a
+**single beat sequence** — they change and **settle at the same moment** (no free-scroll spline;
+that old behavior is retired so the two never fight).
+
+- **Beats:** 0 = AQUARIA wordmark; 1–5 = the five intro-story paragraphs; loops back to 0.
+  Each beat = `{ camera framing, text lines, type treatment, placement }`.
+- **Input = snap:** wheel deltas accumulate to a threshold, then advance exactly one beat. Input is
+  locked during a transition (+ short cooldown) so one gesture = one beat. Wraps both directions.
+- **Synced transition (GSAP timeline):** outgoing text fades out → camera flies to the new framing
+  over `MOVE_DUR` → new text lands (line stagger + blur) timed to finish **exactly** as the camera stops.
+- **Camera:** `camera.position` + a `_look` target are tweened together; `update()` re-applies
+  `camera.lookAt(_look)` each frame. Each beat's lateral camera drift is composed to balance the text
+  alignment (left text ↔ camera pushed right, etc.).
+
+#### Typography per beat (brand-compliant — two faces only)
+| Beat | Text | Face | Align | Accent |
+|---|---|---|---|---|
+| 0 | AQUARIA | Barrio (display) | center (hero) | coral **R** |
+| 1 | "Once there was a tank…" | Barrio (display) | **left** | — |
+| 2 | octopus + axolotl climb in | IBM Plex Mono | **left** | — |
+| 3 | "…anything popular…" | IBM Plex Mono | **center** | coral *popular* |
+| 4 | "People walked past…" | IBM Plex Mono | **right** | axolotl-pink last line |
+| 5 | "…You can come in." | Barrio (display) | center | coral *You can come in.* |
+
+Color is paper/cream by default; coral and axolotl used sparingly for accents (per brand: *coral does
+the talking*). Placement/size via the `.hero/.left/.center/.right` + `.display/.mono` classes in
+`index.html` and a per-beat `--story-size`. Copy + camera anchors live in the `BEATS` array in
+`NarrativeScroll.js` (tunable: `WHEEL_THRESHOLD`, `MOVE_DUR`).
+
+- Started by `UnderwaterScene.start()` (after the dive); ticked from `UnderwaterScene.update()`.
+- `CameraController` now only owns the one-shot dive; its scroll spline is unused.
+- **Scroll is locked during menu conversations.** `UnderwaterScene.triggerSection()` calls
+  `narrative.lockScroll()` and passes an `onComplete` to `ConversationSystem.triggerSection()` that
+  calls `narrative.unlockScroll()` when the section dialogue finishes (every path unlocks, including
+  no-config / superseded). The camera holds its current framing while the conversation plays.
+
+### Dive loader (`#dive-loader`)
+After the user hits **Enter**, an on-brand loader (rising cream bubbles + "descending" caption over a
+shallow→abyss gradient) fades in immediately, holds briefly, then dissolves into the descent — covering
+any warmup and making the dive feel intentional. Driven by a GSAP timeline in `main.js` `enterWater()`;
+respects `prefers-reduced-motion` (the bubble keyframes are disabled, the fade still runs).
 
 ---
 

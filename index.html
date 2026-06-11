@@ -120,24 +120,63 @@
       margin-bottom: 24px;
     }
 
-    /* ── Scene wordmark (visible after dive) ── */
-    #scene-wordmark {
+    /* ── Narrative story text (scroll-synced to the camera) ── */
+    #story-text {
       position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-family: var(--font-display);
-      font-size: clamp(52px, 9vw, 120px);
-      letter-spacing: .04em;
-      color: #ffffff;
+      font-size: var(--story-size, clamp(16px, 1.6vw, 22px));
+      color: var(--paper);
+      text-shadow: 0 2px 24px rgba(13, 32, 40, .62), 0 0 3px rgba(13, 32, 40, .5);
       pointer-events: none;
-      opacity: 0;
-      z-index: 5;
-      display: flex;
       user-select: none;
+      opacity: 0;
+      z-index: 6;
     }
 
-    #scene-wordmark .r-letter { color: var(--coral); }
+    /* Each line animates in independently */
+    #story-text .line {
+      display: block;
+      will-change: transform, opacity, filter;
+    }
+    #story-text .accent { color: var(--coral); }
+    #story-text .soft   { color: var(--axolotl); }
+
+    /* Typeface treatments (brand: two faces only) */
+    #story-text.display {
+      font-family: var(--font-display);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      line-height: 1.06;
+    }
+    #story-text.mono {
+      font-family: var(--font-mono);
+      font-weight: 400;
+      letter-spacing: .01em;
+      line-height: 1.75;
+    }
+
+    /* Placement / alignment per beat */
+    #story-text.hero {
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(820px, 92vw);
+      text-align: center;
+    }
+    #story-text.left {
+      top: 38%; left: 7vw;
+      max-width: 46vw;
+      text-align: left;
+    }
+    #story-text.center {
+      top: 42%; left: 50%;
+      transform: translateX(-50%);
+      width: min(660px, 86vw);
+      text-align: center;
+    }
+    #story-text.right {
+      top: 40%; right: 7vw;
+      max-width: 46vw;
+      text-align: right;
+    }
 
     /* ── Moon — doubles as menu button ── */
     #moon {
@@ -223,43 +262,52 @@
       color: var(--paper);
     }
 
-    /* ── Speech bubbles — SVG background ── */
+    /* ── Speech bubbles — SVG background ──
+       --bubble-scale (set per message in SpeechBubble.js) grows the whole bubble
+       for longer lines. Font scales with it; padding/width are in em / scaled px so
+       the blob keeps its proportions. Transform is owned by the CSS2D renderer. */
     .speech-bubble {
       font-family: var(--font-mono);
-      font-size: 13px;
+      font-size: calc(13px * var(--bubble-scale, 1));
       color: var(--ink);
       line-height: 1.5;
       position: relative;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      text-align: center;
       opacity: 0;
-      transform: scale(0.88) translateY(6px);
       pointer-events: none;
       white-space: normal;
       border: none;
       background-color: transparent;
       background-repeat: no-repeat;
       background-size: 100% 100%;
+      transition: opacity 0.3s, font-size 0.25s, min-width 0.25s, max-width 0.25s, min-height 0.25s;
     }
 
-    /* bubble1 — Otto's wide blob (556×173 ratio) */
+    /* bubble1 — octopus's wide blob (556×173 ratio) */
     .speech-bubble.bubble1 {
       background-image: url('/assets/bubble/bubble1.svg');
-      min-width: 210px;
-      max-width: 240px;
-      padding: 30px 52px 30px 48px;
+      min-width: calc(210px * var(--bubble-scale, 1));
+      max-width: calc(240px * var(--bubble-scale, 1));
+      min-height: calc(88px * var(--bubble-scale, 1));
+      padding: 2.3em 4em 2.3em 3.7em;
     }
 
-    /* bubble2 — Mochi's rounder blob (385×148 ratio) */
+    /* bubble2 — axolotl's rounder blob (385×148 ratio) */
     .speech-bubble.bubble2 {
       background-image: url('/assets/bubble/bubble2.svg');
-      min-width: 180px;
-      max-width: 210px;
-      padding: 28px 46px 28px 42px;
+      min-width: calc(180px * var(--bubble-scale, 1));
+      max-width: calc(210px * var(--bubble-scale, 1));
+      min-height: calc(84px * var(--bubble-scale, 1));
+      padding: 2.15em 3.5em 2.15em 3.2em;
     }
 
     .speech-bubble.visible {
       opacity: 1;
-      transform: scale(1) translateY(0);
-      transition: opacity 0.3s, transform 0.3s;
     }
 
     /* ── Chat input ── */
@@ -338,6 +386,51 @@
       color: var(--squid);
     }
 
+    /* ── Dive loader (post-Enter descent) ── */
+    #dive-loader {
+      position: fixed;
+      inset: 0;
+      z-index: 150;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 26px;
+      background: linear-gradient(180deg, var(--shallow-lite) 0%, var(--shallow) 34%, var(--abyss) 100%);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .dive-bubbles {
+      display: flex;
+      gap: 13px;
+    }
+
+    .dive-bubbles span {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 36% 32%, #fffdf6, var(--paper));
+      box-shadow: 0 0 18px 2px rgba(255, 249, 237, .5);
+      animation: diveRise 1.1s ease-in-out infinite;
+    }
+    .dive-bubbles span:nth-child(2) { animation-delay: .16s; }
+    .dive-bubbles span:nth-child(3) { animation-delay: .32s; }
+
+    @keyframes diveRise {
+      0%, 100% { transform: translateY(7px); opacity: .45; }
+      50%      { transform: translateY(-7px); opacity: 1; }
+    }
+
+    .dive-caption {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: .26em;
+      text-transform: uppercase;
+      color: var(--paper);
+      opacity: .85;
+    }
+
     @media (prefers-reduced-motion: reduce) {
       * { transition: none !important; animation: none !important; }
     }
@@ -346,15 +439,19 @@
 <body>
   <div id="loading">loading</div>
 
+  <!-- Dive loader — shown right after Enter, fades out as the descent reveals -->
+  <div id="dive-loader" aria-hidden="true">
+    <div class="dive-bubbles"><span></span><span></span><span></span></div>
+    <div class="dive-caption">descending</div>
+  </div>
+
   <div id="app"></div>
   <div id="css2d-layer"></div>
   <div id="ui-layer">
     <div id="moon"></div>
 
-    <!-- Scene wordmark — visible in underwater scene -->
-    <div id="scene-wordmark" aria-hidden="true">
-      A<span>Q</span>UA<span class="r-letter">R</span>IA
-    </div>
+    <!-- Narrative story text — wordmark + intro story, scroll-synced to the camera -->
+    <div id="story-text" aria-hidden="true"></div>
 
     <!-- Entry screen (shown before Enter click) -->
     <div id="entry-screen">

@@ -10,6 +10,7 @@ import { Axolotl }            from '../characters/Axolotl.js';
 import { BubbleSystem }       from '../systems/BubbleSystem.js';
 import { CameraController }   from '../systems/CameraController.js';
 import { ConversationSystem } from '../systems/ConversationSystem.js';
+import { NarrativeScroll }    from '../systems/NarrativeScroll.js';
 import { SpeechBubble }       from '../ui/SpeechBubble.js';
 
 const WarpShader = {
@@ -97,6 +98,7 @@ export class UnderwaterScene {
     this._buildInteraction();
 
     this.cameraController = new CameraController(this.camera);
+    this.narrative = new NarrativeScroll(this.camera);
   }
 
   _buildScene() {
@@ -125,8 +127,8 @@ export class UnderwaterScene {
         const loader = new THREE.ObjectLoader();
         const loadedScene = loader.parse(editorJSON.scene);
         const envGroup = new THREE.Group();
-        envGroup.position.set(3.5, -4, -8);
-        envGroup.scale.set(3.5, 3.5, 3.5);
+        envGroup.position.set(3.5, -4, -10);
+        envGroup.scale.set(3, 3, 3);
         loadedScene.children.slice().forEach(child => {
           loadedScene.remove(child);
           envGroup.add(child);
@@ -167,22 +169,22 @@ export class UnderwaterScene {
 
   _buildCharacters() {
     // Characters sit lower, bigger — bottom-center composition like the reference
-    this.otto  = new Octopus(this.scene, { position: new THREE.Vector3(-1.4, -1.2, 0), scale: 1.5 });
-    this.mochi = new Axolotl(this.scene, { position: new THREE.Vector3( 1.4, -1.4, 0), scale: 1.4 });
+    this.octopus  = new Octopus(this.scene, { position: new THREE.Vector3(-1.4, -1.2, 0), scale: 1.5 });
+    this.axolotl = new Axolotl(this.scene, { position: new THREE.Vector3( 1.4, -1.4, 0), scale: 1.4 });
 
-    this.ottoBubble  = new SpeechBubble(this.css2d, 'bubble1');
-    this.mochiBubble = new SpeechBubble(this.css2d, 'bubble2');
+    this.octopusBubble  = new SpeechBubble(this.css2d, 'bubble1');
+    this.axolotlBubble = new SpeechBubble(this.css2d, 'bubble2');
 
     // Otto bubble sits just above-left of body; Mochi just above-right
-    this.ottoBubble.attachTo(this.otto.group,   new THREE.Vector3(-1.0, 1.4, 0));
-    this.mochiBubble.attachTo(this.mochi.group,  new THREE.Vector3( 1.0, 1.2, 0));
+    this.octopusBubble.attachTo(this.octopus.group,   new THREE.Vector3(-1.0, 1.4, 0));
+    this.axolotlBubble.attachTo(this.axolotl.group,  new THREE.Vector3( 1.0, 1.2, 0));
 
     // Initial clickables from placeholders; rebuilt after GLTF loads
     this._rebuildClickables();
 
     this._modelsReady = Promise.all([
-      this.otto.loadGLTF('/assets/models/Octopus.glb',  { rotationY: -Math.PI / 2 }),
-      this.mochi.loadGLTF('/assets/models/Axolotl.glb', { rotationY: -Math.PI / 2 }),
+      this.octopus.loadGLTF('/assets/models/Octopus.glb',  { rotationY: -Math.PI / 2 }),
+      this.axolotl.loadGLTF('/assets/models/Axolotl.glb', { rotationY: -Math.PI / 2 }),
     ]).then(() => this._rebuildClickables());
   }
 
@@ -192,14 +194,14 @@ export class UnderwaterScene {
 
   _rebuildClickables() {
     this._clickables = [];
-    this.otto.group.traverse(m  => { if (m.isMesh) { m.userData.character = this.otto;  this._clickables.push(m); } });
-    this.mochi.group.traverse(m => { if (m.isMesh) { m.userData.character = this.mochi; this._clickables.push(m); } });
+    this.octopus.group.traverse(m  => { if (m.isMesh) { m.userData.character = this.octopus;  this._clickables.push(m); } });
+    this.axolotl.group.traverse(m => { if (m.isMesh) { m.userData.character = this.axolotl; this._clickables.push(m); } });
   }
 
   _buildConversation() {
     this.conversation = new ConversationSystem(
-      this.otto, this.ottoBubble,
-      this.mochi, this.mochiBubble
+      this.octopus, this.octopusBubble,
+      this.axolotl, this.axolotlBubble
     );
 
     // Schedule random Octopus hits
@@ -210,7 +212,7 @@ export class UnderwaterScene {
     const delay = 12000 + Math.random() * 18000;
     this._hitTimer = setTimeout(() => {
       if (!this._hoveredChar) {
-        this.otto.hitCharacter(this.mochi);
+        this.octopus.hitCharacter(this.axolotl);
       }
       this._scheduleHit();
     }, delay);
@@ -298,11 +300,15 @@ export class UnderwaterScene {
 
   start() {
     this.conversation.startIdle();
-    this.cameraController.enableScroll();
+    // NarrativeScroll owns the camera + story text after the dive (snap-synced),
+    // replacing the old free-scroll spline so the two never fight.
+    this.narrative.start();
   }
 
   triggerSection(section) {
-    this.conversation.triggerSection(section);
+    // Freeze the scroll narrative while the menu conversation plays; resume when it ends.
+    this.narrative.lockScroll();
+    this.conversation.triggerSection(section, () => this.narrative.unlockScroll());
   }
 
   update() {
@@ -310,10 +316,10 @@ export class UnderwaterScene {
     const delta = Math.min(this._clock.getDelta(), 0.05);
     this._t += delta;
 
-    this.otto.update(delta);
-    this.mochi.update(delta);
+    this.octopus.update(delta);
+    this.axolotl.update(delta);
     this.bubbles.update(delta, this.camera, this._mouse);
-    this.cameraController.update(delta);
+    this.narrative.update();
 
     if (this._warpPass) this._warpPass.uniforms.uTime.value = this._t;
   }

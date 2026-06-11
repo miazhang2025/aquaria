@@ -17,8 +17,18 @@ export class SpeechBubble {
     parent.add(this.object);
   }
 
+  // Longer lines get a bigger bubble. CSS2DRenderer owns the element's transform,
+  // so we scale via font-size + width (a CSS var) rather than a transform.
+  _applyScale(text) {
+    const len = text.length;
+    const scale = Math.min(1.5, Math.max(1, 1 + (len - 30) / 220));
+    this.el.style.setProperty('--bubble-scale', scale.toFixed(3));
+  }
+
   show(text, duration = 4000) {
     clearTimeout(this._hideTimeout);
+    clearTimeout(this._visibilityTimer);
+    this._applyScale(text);
     this.el.textContent = text;
     this.object.visible = true;
     requestAnimationFrame(() => this.el.classList.add('visible'));
@@ -30,6 +40,8 @@ export class SpeechBubble {
 
   showWithLink(text, href) {
     clearTimeout(this._hideTimeout);
+    clearTimeout(this._visibilityTimer);
+    this._applyScale(text);
     this.el.innerHTML = '';
     const textNode = document.createTextNode(text + ' ');
     const link = document.createElement('a');
@@ -45,6 +57,6 @@ export class SpeechBubble {
 
   hide() {
     this.el.classList.remove('visible');
-    setTimeout(() => { this.object.visible = false; }, 300);
+    this._visibilityTimer = setTimeout(() => { this.object.visible = false; }, 300);
   }
 }

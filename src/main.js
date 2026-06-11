@@ -44,6 +44,7 @@ function animateWordmark() {
 async function enterWater() {
   const entryScreen = document.getElementById('entry-screen');
   const moon        = document.getElementById('moon');
+  const diveLoader  = document.getElementById('dive-loader');
 
   // Fade out entry screen
   gsap.to(entryScreen, {
@@ -53,12 +54,18 @@ async function enterWater() {
     onComplete: () => { entryScreen.style.display = 'none'; },
   });
 
+  // Dive loader: appear immediately, hold briefly, then dissolve into the descent
+  gsap.timeline()
+    .set(diveLoader, { pointerEvents: 'auto' })
+    .to(diveLoader, { opacity: 1, duration: 0.3, ease: 'power2.out' })
+    .to(diveLoader, { opacity: 0, duration: 1.1, ease: 'power2.inOut' }, '+=0.8')
+    .set(diveLoader, { pointerEvents: 'none', display: 'none' });
+
   // Switch renderer to underwater scene
   activeScene = 'underwater';
 
-  // Fade in moon + scene wordmark
+  // Fade in moon (the AQUARIA wordmark is revealed by the story system after the dive)
   gsap.to(moon, { opacity: 1, duration: 1.5, delay: 0.5 });
-  gsap.to(document.getElementById('scene-wordmark'), { opacity: 1, duration: 1.8, delay: 1.2 });
 
   // Trigger bubble burst
   underwaterScene.bubbles.burst(new THREE.Vector3(0, 2, 0), 40);
